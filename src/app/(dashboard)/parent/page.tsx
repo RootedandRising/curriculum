@@ -1,25 +1,47 @@
-import { getUser, getChildren } from '@/lib/actions/auth'
-import { redirect } from 'next/navigation'
+import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
 import { AddChildButton } from '@/components/dashboard/add-child-button'
 
 export default async function ParentDashboard() {
-  const user = await getUser()
+  const supabase = await createClient()
+  const { data: { user: authUser } } = await supabase.auth.getUser()
 
-  if (!user) {
-    redirect('/login')
+  // Get user profile
+  const { data: user } = await supabase
+    .from('users')
+    .select(`
+      *,
+      family:families(*)
+    `)
+    .eq('id', authUser!.id)
+    .single()
+
+  // Get children in the family
+  let children: any[] = []
+  if (user?.family_id) {
+    const { data } = await supabase
+      .from('users')
+      .select(`
+        *,
+        student_profile:student_profiles(*)
+      `)
+      .eq('family_id', user.family_id)
+      .eq('role', 'student')
+      .order('created_at', { ascending: true })
+    children = data || []
   }
 
-  const children = await getChildren()
+  const displayName = user?.first_name || authUser?.email?.split('@')[0] || 'Parent'
+  const familyName = user?.family?.name || 'Your Family'
 
   return (
     <div>
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900">
-          Welcome, {user.first_name}!
+          Welcome, {displayName}!
         </h1>
         <p className="text-gray-600 mt-1">
-          {user.family?.name} Dashboard
+          {familyName} Dashboard
         </p>
       </div>
 

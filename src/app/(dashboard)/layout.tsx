@@ -1,4 +1,4 @@
-import { getUser } from '@/lib/actions/auth'
+import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { DashboardNav } from '@/components/dashboard/nav'
 
@@ -7,10 +7,27 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode
 }) {
-  const user = await getUser()
+  const supabase = await createClient()
+  const { data: { user: authUser } } = await supabase.auth.getUser()
 
-  if (!user) {
+  if (!authUser) {
     redirect('/login')
+  }
+
+  // Get user profile for display
+  const { data: profile } = await supabase
+    .from('users')
+    .select(`
+      *,
+      family:families(*)
+    `)
+    .eq('id', authUser.id)
+    .single()
+
+  const user = profile || {
+    first_name: authUser.email?.split('@')[0] || 'User',
+    last_name: null,
+    family: null,
   }
 
   return (
