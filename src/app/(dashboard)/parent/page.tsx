@@ -1,13 +1,20 @@
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import Link from 'next/link'
 import { AddChildButton } from '@/components/dashboard/add-child-button'
+
+// Disable caching for this page
+export const dynamic = 'force-dynamic'
 
 export default async function ParentDashboard() {
   const supabase = await createClient()
   const { data: { user: authUser } } = await supabase.auth.getUser()
 
+  // Use admin client to bypass RLS for queries
+  const adminClient = createAdminClient()
+
   // Get user profile
-  const { data: user } = await supabase
+  const { data: user } = await adminClient
     .from('users')
     .select(`
       *,
@@ -16,14 +23,17 @@ export default async function ParentDashboard() {
     .eq('id', authUser!.id)
     .single()
 
-  // Get children in the family
+  // Get children in the family with their grade info
   let children: any[] = []
   if (user?.family_id) {
-    const { data } = await supabase
+    const { data } = await adminClient
       .from('users')
       .select(`
         *,
-        student_profile:student_profiles(*)
+        student_profile:student_profiles(
+          *,
+          grade:grades(*)
+        )
       `)
       .eq('family_id', user.family_id)
       .eq('role', 'student')
@@ -64,36 +74,57 @@ export default async function ParentDashboard() {
           </div>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {children.map((child: any) => (
-              <Link
-                key={child.id}
-                href={`/parent/children/${child.id}`}
-                className="block p-6 bg-gradient-to-br from-primary-50 to-white border border-primary-100 rounded-xl hover:shadow-md transition"
-              >
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 bg-primary-500 rounded-full flex items-center justify-center text-white font-bold text-lg">
-                    {child.first_name[0]}
+            {children.map((child: any) => {
+              const profile = child.student_profile?.[0]
+              const gradeName = profile?.grade?.name || 'No grade assigned'
+
+              return (
+                <div
+                  key={child.id}
+                  className="p-6 bg-gradient-to-br from-primary-50 to-white border border-primary-100 rounded-xl"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="w-14 h-14 bg-primary-500 rounded-full flex items-center justify-center text-white font-bold text-xl">
+                      {child.first_name[0]}
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-gray-900 text-lg">
+                        {child.first_name} {child.last_name}
+                      </h3>
+                      <p className="text-sm text-primary-600 font-medium">{gradeName}</p>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="font-semibold text-gray-900">
-                      {child.first_name} {child.last_name}
-                    </h3>
-                    {child.student_profile?.[0]?.current_grade_id && (
-                      <p className="text-sm text-gray-500">Grade enrolled</p>
-                    )}
+
+                  <div className="mt-4 flex items-center gap-4 text-sm text-gray-500">
+                    <span className="flex items-center gap-1">
+                      <span className="w-2 h-2 bg-green-400 rounded-full"></span>
+                      Active
+                    </span>
+                    <span>
+                      {profile?.current_streak || 0} day streak
+                    </span>
+                    <span>
+                      {profile?.points_total || 0} points
+                    </span>
+                  </div>
+
+                  <div className="mt-4 flex gap-2">
+                    <Link
+                      href={`/parent/children/${child.id}/lessons`}
+                      className="flex-1 bg-primary-600 text-white py-2 px-4 rounded-lg font-medium hover:bg-primary-700 transition text-center text-sm"
+                    >
+                      Start Lessons
+                    </Link>
+                    <Link
+                      href={`/parent/children/${child.id}`}
+                      className="px-4 py-2 border border-gray-300 text-gray-600 rounded-lg font-medium hover:bg-gray-50 transition text-sm"
+                    >
+                      View
+                    </Link>
                   </div>
                 </div>
-                <div className="mt-4 flex items-center gap-4 text-sm text-gray-500">
-                  <span className="flex items-center gap-1">
-                    <span className="w-2 h-2 bg-green-400 rounded-full"></span>
-                    Active
-                  </span>
-                  <span>
-                    {child.student_profile?.[0]?.current_streak || 0} day streak
-                  </span>
-                </div>
-              </Link>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>

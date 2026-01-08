@@ -2,6 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { revalidatePath } from 'next/cache'
 
 export async function login(formData: FormData) {
   const supabase = await createClient()
@@ -216,6 +217,9 @@ export async function addChild(formData: FormData) {
     console.error('Student profile creation error:', profileError)
     return { error: 'Failed to create student profile' }
   }
+
+  // Revalidate the parent dashboard to show the new child
+  revalidatePath('/parent')
 
   return { success: true }
 }
