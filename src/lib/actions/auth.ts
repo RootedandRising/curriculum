@@ -38,6 +38,7 @@ export async function register(formData: FormData) {
       data: {
         first_name: firstName,
         last_name: lastName,
+        family_name: familyName,
       },
     },
   })
@@ -48,6 +49,12 @@ export async function register(formData: FormData) {
 
   if (!authData.user) {
     return { error: 'Failed to create user' }
+  }
+
+  // Check if this is an existing user (signUp returns existing user without error)
+  // If identities array is empty, the user already exists
+  if (authData.user.identities && authData.user.identities.length === 0) {
+    return { error: 'An account with this email already exists. Please sign in instead.' }
   }
 
   // Use admin client for database operations (bypasses RLS)
