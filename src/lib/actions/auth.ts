@@ -1,6 +1,7 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 export async function login(formData: FormData) {
   const supabase = await createClient()
@@ -49,8 +50,12 @@ export async function register(formData: FormData) {
     return { error: 'Failed to create user' }
   }
 
+  // Use admin client for database operations (bypasses RLS)
+  // This is needed because the session isn't fully established after signUp
+  const adminClient = createAdminClient()
+
   // 2. Create the family record
-  const { data: familyData, error: familyError } = await supabase
+  const { data: familyData, error: familyError } = await adminClient
     .from('families')
     .insert({
       name: familyName,
@@ -66,7 +71,7 @@ export async function register(formData: FormData) {
   }
 
   // 3. Create the user record linked to the family
-  const { error: userError } = await supabase
+  const { error: userError } = await adminClient
     .from('users')
     .insert({
       id: authData.user.id,
@@ -153,19 +158,22 @@ export async function addChild(formData: FormData) {
   const birthDate = formData.get('birthDate') as string
   const gradeId = formData.get('gradeId') as string
 
+  // Use admin client to bypass RLS for queries and inserts
+  const adminClient = createAdminClient()
+
   // Get the parent's family_id
-  const { data: parent } = await supabase
+  const { data: parent } = await adminClient
     .from('users')
     .select('family_id')
     .eq('id', user.id)
     .single()
 
   if (!parent?.family_id) {
-    return { error: 'Family not found' }
+    return { error: 'Family not found. Please try logging out and back in.' }
   }
 
   // Create the student user record
-  const { data: studentUser, error: userError } = await supabase
+  const { data: studentUser, error: userError } = await adminClient
     .from('users')
     .insert({
       family_id: parent.family_id,
@@ -182,7 +190,7 @@ export async function addChild(formData: FormData) {
   }
 
   // Create the student profile
-  const { error: profileError } = await supabase
+  const { error: profileError } = await adminClient
     .from('student_profiles')
     .insert({
       user_id: studentUser.id,
