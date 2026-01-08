@@ -52,7 +52,13 @@ export async function register(formData: FormData) {
 
   // Use admin client for database operations (bypasses RLS)
   // This is needed because the session isn't fully established after signUp
-  const adminClient = createAdminClient()
+  let adminClient
+  try {
+    adminClient = createAdminClient()
+  } catch (e) {
+    console.error('Admin client error:', e)
+    return { error: 'Server configuration error. Please contact support.' }
+  }
 
   // 2. Create the family record
   const { data: familyData, error: familyError } = await adminClient
