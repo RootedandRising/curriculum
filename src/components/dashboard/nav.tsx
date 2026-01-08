@@ -20,7 +20,6 @@ export function DashboardNav({ user }: DashboardNavProps) {
   async function handleLogout() {
     await logout()
     router.push('/login')
-    router.refresh()
   }
 
   return (
