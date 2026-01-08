@@ -10,6 +10,10 @@ export default async function ParentDashboard() {
   const supabase = await createClient()
   const { data: { user: authUser } } = await supabase.auth.getUser()
 
+  if (!authUser) {
+    return <div>Loading...</div>
+  }
+
   // Use admin client to bypass RLS for queries
   const adminClient = createAdminClient()
 
@@ -20,25 +24,38 @@ export default async function ParentDashboard() {
       *,
       family:families(*)
     `)
-    .eq('id', authUser!.id)
+    .eq('id', authUser.id)
     .single()
 
-  // Get children in the family with their grade info
+  // Fetch all grades for lookup
+  const { data: grades } = await adminClient.from('grades').select('*')
+  const gradesMap = new Map(grades?.map(g => [g.id, g]) || [])
+
+  // Get children in the family with their student profiles
   let children: any[] = []
   if (user?.family_id) {
     const { data } = await adminClient
       .from('users')
       .select(`
         *,
-        student_profile:student_profiles(
-          *,
-          grade:grades(*)
-        )
+        student_profile:student_profiles(*)
       `)
       .eq('family_id', user.family_id)
       .eq('role', 'student')
       .order('created_at', { ascending: true })
-    children = data || []
+
+    // Attach grade info to each child's profile
+    // student_profile is a single object (not array) due to UNIQUE constraint
+    children = (data || []).map(child => {
+      const profile = child.student_profile
+      return {
+        ...child,
+        student_profile: profile ? {
+          ...profile,
+          grade: profile.current_grade_id ? gradesMap.get(profile.current_grade_id) : null
+        } : null
+      }
+    })
   }
 
   const displayName = user?.first_name || authUser?.email?.split('@')[0] || 'Parent'
@@ -75,7 +92,7 @@ export default async function ParentDashboard() {
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {children.map((child: any) => {
-              const profile = child.student_profile?.[0]
+              const profile = child.student_profile
               const gradeName = profile?.grade?.name || 'No grade assigned'
 
               return (
